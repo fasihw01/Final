@@ -4,6 +4,16 @@ const { Category } = require('../models/category');
 const router = express.Router();
 const mongoose = require('mongoose');
 const multer = require('multer');
+const multerS3 = require('multer-s3');
+const AWS = require("aws-sdk");
+
+AWS.config.update({
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
+  });
+  
+
+const s3 = new AWS.S3();
 
 const FILE_TYPE_MAP = {
     'image/png': 'png',
@@ -11,7 +21,24 @@ const FILE_TYPE_MAP = {
     'image/jpg': 'jpg'
 }
 
-const storage = multer.diskStorage({
+const storage = multerS3({
+    s3: s3,
+    bucket: process.env.BUCKET, // Access the bucket variable here
+    acl: 'public-read',
+    contentType: multerS3.AUTO_CONTENT_TYPE,
+    metadata: function (req, file, cb) {
+      cb(null, { fieldName: file.fieldname });
+    },
+    key: function (req, file, cb) {
+      const fileName = file.originalname.split(' ').join('-');
+      const extension = FILE_TYPE_MAP[file.mimetype];
+      const key = `${fileName}-${Date.now()}.${extension}`;
+      cb(null, key);
+    }
+  });
+
+
+/* const storage = multer.diskStorage({
     destination: function (req, file, cb) {
         const isValid = FILE_TYPE_MAP[file.mimetype];
         let uploadError = new Error('invalid image type');
@@ -27,9 +54,11 @@ const storage = multer.diskStorage({
       const extension = FILE_TYPE_MAP[file.mimetype];
       cb(null, `${fileName}-${Date.now()}.${extension}`)
     }
-  })
+  }) */
   
-const uploadOptions = multer({ storage: storage })
+  const uploadOptions = multer({ storage: storage });
+
+//const uploadOptions = multer({ storage: storage })
 
 router.get(`/`, async (req, res) =>{
     let filter = {};
@@ -55,7 +84,39 @@ router.get(`/:id`, async (req, res) =>{
     res.send(product);
 })
 
-router.post(`/`, uploadOptions.single('image'), async (req, res) =>{
+router.post('/', uploadOptions.single('image'), async (req, res) => {
+    const category = await Category.findById(req.body.category);
+    if (!category) return res.status(400).send('Invalid Category');
+  
+    const file = req.file;
+    if (!file) return res.status(400).send('No image in the request');
+  
+    const fileName = file.key;
+    const basePath = `https://${process.env.BUCKET}.s3.amazonaws.com/uploads/`;
+  
+    let product = new Product({
+      name: req.body.name,
+      description: req.body.description,
+      richDescription: req.body.richDescription,
+      image: `${basePath}${process.env.BUCKET}${fileName}`,
+      brand: req.body.brand,
+      price: req.body.price,
+      category: req.body.category,
+      countInStock: req.body.countInStock,
+      rating: req.body.rating,
+      numReviews: req.body.numReviews,
+      isFeatured: req.body.isFeatured,
+    });
+  
+    product = await product.save();
+  
+    if (!product) return res.status(500).send('The product cannot be created');
+  
+    res.send(product);
+  });
+
+
+/* router.post(`/`, uploadOptions.single('image'), async (req, res) =>{
     const category = await Category.findById(req.body.category);
     if(!category) return res.status(400).send('Invalid Category')
 
@@ -64,11 +125,12 @@ router.post(`/`, uploadOptions.single('image'), async (req, res) =>{
 
     const fileName = file.filename
     const basePath = `${req.protocol}://${req.get('host')}/public/uploads/`;
+    const bucket = process.env.BUCKET;
     let product = new Product({
         name: req.body.name,
         description: req.body.description,
         richDescription: req.body.richDescription,
-        image: `${basePath}${fileName}`,// "http://localhost:3000/public/upload/image-2323232"
+        image: `${basePath}${bucket}${fileName}`,// "http://localhost:3000/public/upload/image-2323232"
         brand: req.body.brand,
         price: req.body.price,
         category: req.body.category,
@@ -84,7 +146,7 @@ router.post(`/`, uploadOptions.single('image'), async (req, res) =>{
     return res.status(500).send('The product cannot be created')
 
     res.send(product);
-})
+}) */
 
 router.put('/:id',async (req, res)=> {
     if(!mongoose.isValidObjectId(req.params.id)) {
@@ -159,7 +221,8 @@ router.put(
          }
          const files = req.files
          let imagesPaths = [];
-         const basePath = `${req.protocol}://${req.get('host')}/public/uploads/`;
+         //const basePath = `${req.protocol}://${req.get('host')}/public/uploads/`;
+         const basePath = `https://${process.env.BUCKET}.s3.amazonaws.com/uploads/`;
 
          if(files) {
             files.map(file =>{

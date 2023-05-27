@@ -8,6 +8,7 @@ const authJwt = require('./helpers/jwt');
 const errorHandler = require('./helpers/error-handler');
 
 
+
 app.use(cors());
 app.options('*', cors())
 
@@ -31,6 +32,7 @@ app.use(`${api}/products`, productsRoutes);
 app.use(`${api}/users`, usersRoutes);
 app.use(`${api}/orders`, ordersRoutes);
 
+
 //Database
 mongoose.connect(process.env.CONNECTION_STRING, {
     useNewUrlParser: true,
@@ -47,5 +49,5 @@ mongoose.connect(process.env.CONNECTION_STRING, {
 //Server
 app.listen(3000, ()=>{
 
-    console.log('server is running http://localhost:3000');
+    console.log(`server is running`);
 })
