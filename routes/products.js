@@ -4,16 +4,15 @@ const { Category } = require('../models/category');
 const router = express.Router();
 const mongoose = require('mongoose');
 const multer = require('multer');
-const multerS3 = require('multer-s3');
-const AWS = require("aws-sdk");
+const cloudinary = require('cloudinary').v2;
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
 
-AWS.config.update({
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
+
+cloudinary.config({
+    cloud_name: process.env.CLOUD_NAME,
+    api_key: process.env.API_KEY,
+    api_secret: process.env.API_SECRET
   });
-  
-
-const s3 = new AWS.S3();
 
 const FILE_TYPE_MAP = {
     'image/png': 'png',
@@ -21,44 +20,15 @@ const FILE_TYPE_MAP = {
     'image/jpg': 'jpg'
 }
 
-const storage = multerS3({
-    s3: s3,
-    bucket: process.env.BUCKET, // Access the bucket variable here
-    acl: 'public-read',
-    contentType: multerS3.AUTO_CONTENT_TYPE,
-    metadata: function (req, file, cb) {
-      cb(null, { fieldName: file.fieldname });
+const storage = new CloudinaryStorage({
+    cloudinary: cloudinary,
+    params: {
+       public_id: (req, file) => file.originalname.split(' ').join('-'),
+       // Optional: Specify the folder in your Cloudinary account where you want to store the images
+      allowedFormats: ['png', 'jpg','jpeg'], // Replace 'png' with the desired image format or remove this line to keep the original format
     },
-    key: function (req, file, cb) {
-      const fileName = file.originalname.split(' ').join('-');
-      const extension = FILE_TYPE_MAP[file.mimetype];
-      const key = `${fileName}-${Date.now()}.${extension}`;
-      cb(null, key);
-    }
   });
-
-
-/* const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
-        const isValid = FILE_TYPE_MAP[file.mimetype];
-        let uploadError = new Error('invalid image type');
-
-        if(isValid) {
-            uploadError = null
-        }
-      cb(uploadError, 'public/uploads')
-    },
-    filename: function (req, file, cb) {
-        
-      const fileName = file.originalname.split(' ').join('-');
-      const extension = FILE_TYPE_MAP[file.mimetype];
-      cb(null, `${fileName}-${Date.now()}.${extension}`)
-    }
-  }) */
-  
   const uploadOptions = multer({ storage: storage });
-
-//const uploadOptions = multer({ storage: storage })
 
 router.get(`/`, async (req, res) =>{
     let filter = {};
@@ -84,39 +54,7 @@ router.get(`/:id`, async (req, res) =>{
     res.send(product);
 })
 
-router.post('/', uploadOptions.single('image'), async (req, res) => {
-    const category = await Category.findById(req.body.category);
-    if (!category) return res.status(400).send('Invalid Category');
-  
-    const file = req.file;
-    if (!file) return res.status(400).send('No image in the request');
-  
-    const fileName = file.key;
-    const basePath = `https://${process.env.BUCKET}.s3.amazonaws.com/uploads/`;
-  
-    let product = new Product({
-      name: req.body.name,
-      description: req.body.description,
-      richDescription: req.body.richDescription,
-      image: `${basePath}${process.env.BUCKET}${fileName}`,
-      brand: req.body.brand,
-      price: req.body.price,
-      category: req.body.category,
-      countInStock: req.body.countInStock,
-      rating: req.body.rating,
-      numReviews: req.body.numReviews,
-      isFeatured: req.body.isFeatured,
-    });
-  
-    product = await product.save();
-  
-    if (!product) return res.status(500).send('The product cannot be created');
-  
-    res.send(product);
-  });
-
-
-/* router.post(`/`, uploadOptions.single('image'), async (req, res) =>{
+router.post(`/`, uploadOptions.single('image'), async (req, res) =>{
     const category = await Category.findById(req.body.category);
     if(!category) return res.status(400).send('Invalid Category')
 
@@ -124,13 +62,17 @@ router.post('/', uploadOptions.single('image'), async (req, res) => {
     if(!file) return res.status(400).send('No image in the request')
 
     const fileName = file.filename
-    const basePath = `${req.protocol}://${req.get('host')}/public/uploads/`;
-    const bucket = process.env.BUCKET;
+    //const basePath = `${req.protocol}://${req.get('host')}/public/uploads/`;
+    const result = await cloudinary.uploader.upload(file.path, {
+        folder: '/public/images', // Optional: Specify the folder in your Cloudinary account where you want to store the images
+        allowed_formats: ['png', 'jpg', 'jpeg'], // Replace 'png' with the desired image format or remove this line to keep the original format
+        public_id: file.originalname.split(' ').join('-'),
+      });
     let product = new Product({
         name: req.body.name,
         description: req.body.description,
         richDescription: req.body.richDescription,
-        image: `${basePath}${bucket}${fileName}`,// "http://localhost:3000/public/upload/image-2323232"
+        image: `${result.secure_url}`,// "http://localhost:3000/public/upload/image-2323232"
         brand: req.body.brand,
         price: req.body.price,
         category: req.body.category,
@@ -146,7 +88,7 @@ router.post('/', uploadOptions.single('image'), async (req, res) => {
     return res.status(500).send('The product cannot be created')
 
     res.send(product);
-}) */
+})
 
 router.put('/:id',async (req, res)=> {
     if(!mongoose.isValidObjectId(req.params.id)) {
@@ -221,14 +163,23 @@ router.put(
          }
          const files = req.files
          let imagesPaths = [];
-         //const basePath = `${req.protocol}://${req.get('host')}/public/uploads/`;
-         const basePath = `https://${process.env.BUCKET}.s3.amazonaws.com/uploads/`;
+         const basePath = `${req.protocol}://${req.get('host')}/public/uploads/`;
 
-         if(files) {
-            files.map(file =>{
-                imagesPaths.push(`${basePath}${file.filename}`);
-            })
-         }
+         if (files) {
+            for (const file of files) {
+              try {
+                const result = await cloudinary.uploader.upload(file.path, {
+                    folder: '/public/images', // Optional: Specify the folder in your Cloudinary account where you want to store the images
+                  allowed_formats: ['png', 'jpg', 'jpeg'], // Replace 'png' with the desired image format or remove this line to keep the original format
+                  public_id: file.originalname.split(' ').join('-'),
+                });
+                imagesPaths.push(result.secure_url);
+              } catch (error) {
+                // Handle any error that occurred during image upload
+                return res.status(500).send('Failed to upload one or more images');
+              }
+            }
+          }
 
          const product = await Product.findByIdAndUpdate(
             req.params.id,
