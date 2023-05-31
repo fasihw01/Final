@@ -110,19 +110,20 @@ router.patch('/:id', uploadOptions.single('image'),async (req, res)=> {
 
     const product = await Product.findByIdAndUpdate(
         req.params.id,
-        {
-            name: req.body.name,
-            description: req.body.description,
-            richDescription: req.body.richDescription,
-            image: `${result.secure_url}`,
-            brand: req.body.brand,
-            price: req.body.price,
-            category: req.body.category,
-            countInStock: req.body.countInStock,
-            rating: req.body.rating,
-            numReviews: req.body.numReviews,
-            isFeatured: req.body.isFeatured,
-        },
+        req.body,
+//         {
+//             name: req.body.name,
+//             description: req.body.description,
+//             richDescription: req.body.richDescription,
+//             image: `${result.secure_url}`,
+//             brand: req.body.brand,
+//             price: req.body.price,
+//             category: req.body.category,
+//             countInStock: req.body.countInStock,
+//             rating: req.body.rating,
+//             numReviews: req.body.numReviews,
+//             isFeatured: req.body.isFeatured,
+//         },
         { new: true}
     )
 
