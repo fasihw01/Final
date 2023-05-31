@@ -90,7 +90,7 @@ router.post(`/`, uploadOptions.single('image'), async (req, res) =>{
     res.send(product);
 })
 
-router.put('/:id', uploadOptions.single('image'),async (req, res)=> {
+router.patch('/:id', uploadOptions.single('image'),async (req, res)=> {
     if(!mongoose.isValidObjectId(req.params.id)) {
        return res.status(400).send('Invalid Product Id')
     }
@@ -165,7 +165,7 @@ router.get(`/get/featured/:count`, async (req, res) =>{
     res.send(products);
 })
 
-router.put(
+router.patch(
     '/gallery-images/:id', 
     uploadOptions.array('images', 10), 
     async (req, res)=> {
